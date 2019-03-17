@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <unistd.h>
-
+#include <vector>
 #ifndef __APPLE__
 #include <GL/gl.h>
 #include <GL/glu.h>
@@ -18,6 +18,100 @@
 
 using namespace std;
 enum { NONE, AMBIENT, DIFFUSE, SPECULAR, NUM_MODES };
+
+struct particle{
+   vec3 p;
+   float m;
+   vec3 v;
+   vec3 appForce;
+   vec3 color; 
+   float dur;
+   void restitution(float epsilon){
+      v[1] = -1*epsilon*v[1];
+   }
+   
+   void damping(float alpha){
+      v[0] = alpha*v[0];
+      v[2] = alpha*v[2];
+   }
+ 
+   void collision(){
+      if(p[1] < 0){
+         p[1] = 0.0f;
+         if(v[1] < 0.0f){
+            restitution(0.1f);
+            damping(0.1f);
+         }
+      }
+
+   }
+   void resetForce(){
+      appForce = vec3(0.0f, 0.0f, 0.0f);
+   }
+   
+   void eulerStep(float h){
+      dur += h;
+      p += h*v; 
+      v += (h/m)*appForce;
+      collision();
+   }
+};
+
+vector<particle> particles;
+
+float random(float k, float l){
+
+   float r = k + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(l-k)));
+
+   return r;
+}
+
+
+vec3 getParticleColor(float d){
+   vec3 yellow = vec3(1.0f, 1,0.0f);
+   vec3 red = vec3(1.0f, 0.0f,0.0f);
+   vec3 green = vec3(0.0f, 1.0f,0.0f);
+   vec3 grey = vec3(0.5f, 0.5,0.5f);
+   vec3 color = vec3(0.0f, 0.0f, 0.0f);
+   float alpha = 0.0f;
+   if(d < 0.1f){
+      color = yellow;
+   }
+   else if(d < 1.5){
+      alpha = d/1.5;
+      color = (yellow - alpha*green); 
+
+   }
+   else if(d < 2){
+      color = red;
+   }
+   else if(d < 3){
+      alpha = (d - 2.0f);
+      color = (red - alpha*vec3(0.5f, -0.5f, -0.5f));
+   }
+   else{
+      color = grey;
+   }
+
+   return color;
+
+}
+
+void initParticle(struct particle& par){
+   par.p = vec3(random(-0.2f, 0.2f), 0.5f, random(-0.2f, 0.2f));
+   par.m = 1.0f;
+   par.v = vec3(10*par.p[0], random(1.0f, 10.0f), 10*par.p[2]);
+   par.appForce = vec3(0.0f, -9.8f*par.m, 0.0);
+   par.color = vec3(255.0f, 255.0f, 0.0f);
+   par.dur = 0.0f;
+}
+void fillParticles(unsigned n){
+   struct particle par;
+   for(unsigned i = 0; i < n; i++){
+      initParticle(par);
+      particles.push_back(par);
+   }
+}
 
 void draw_grid(int dim);
 void draw_obj(obj *o, const gl_image_texture_map& textures);
@@ -108,6 +202,11 @@ void application::init_event()
             }
         }
     }
+
+    // My code begins here.
+    unsigned numParticles = 10;
+    fillParticles(numParticles);
+  
 }
 
 // triggered each time the application needs to redraw
@@ -123,10 +222,17 @@ void application::draw_event()
         //ADD NEW PARTICLES
         //
         //
+        if(particles.size() < 5000){
+           fillParticles(20);
+        }
         // SIMULATE YOUR PARTICLE HERE.
         //
         //
         //
+        //
+        for(unsigned j = 0; j < particles.size(); j++){
+           particles.at(j).eulerStep(h);
+        }
         // UPDATE THE COLOR OF THE PARTICLE DYNAMICALLY
         //
     }
@@ -142,6 +248,21 @@ void application::draw_event()
         // glVertex3f(...) endpoint 2
         //
         //
+    vec3 currPos = vec3(0,0,0);
+    vec3 newPos = vec3(0,0,0);
+    vec3 c = vec3(0,0,0);
+    for(unsigned i = 0; i < particles.size(); i++){
+      currPos = particles.at(i).p;
+      newPos = currPos + 0.04f*particles.at(i).v;
+      c = getParticleColor(particles.at(i).dur);
+      glColor3f(c[0], c[1], c[2]);
+      glVertex3f(currPos[0], currPos[1], currPos[2]);
+      glVertex3f(newPos[0], newPos[1], newPos[2]);
+
+      if(particles.at(i).dur > 5.0f){
+          initParticle(particles.at(i));
+      }
+    }
     glEnd();
 
     // draw the volcano
